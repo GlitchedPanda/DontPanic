@@ -3,6 +3,10 @@
 #include <TFT_eSPI.h>
 #include <lvgl.h>
 
+#include <sstream>
+
+#include "libs/sqlite3.h"
+
 #include "fonts/DontPanicFont.h"
 
 // ----------------------------
@@ -33,12 +37,19 @@ extern int x, y, z;
 
 extern lv_obj_t *keyboard, *searchBox;
 
+struct CallbackData;
+
 extern void text_dontpanic_background();
+
+extern lv_obj_t* menu_create_page(char* title, lv_obj_t*& menu, lv_obj_t*& content, lv_obj_t*& label);
+extern void menu_create_button(char* title, lv_obj_t*& menu, lv_obj_t*& mainPage, lv_obj_t*& page);
+extern void menu_callback(lv_event_t* event);
 
 extern void gui_startupscreen();
 extern void gui_main_menu();
 extern void gui_search_results(const char* query);
 
+extern void backButtonCallback(lv_event_t* event);
 extern void searchBoxCallback(lv_event_t* event);
 
 extern void touchscreen_read(lv_indev_t* indev, lv_indev_data_t* data);
