@@ -18,12 +18,8 @@ void setup()
   LVGL_Arduino += String('V') + lv_version_major() + "." + lv_version_minor() + "." + lv_version_patch();
   Serial.println(LVGL_Arduino);
 
-  // Initialize XPT2046_Touchscreen to be used by LVGL
-  tsSPIClass.begin(XPT2046_CLK, XPT2046_MISO, XPT2046_MOSI, XPT2046_CS);
-  ts.begin(tsSPIClass);
-
-  // Rotate the touch screen
-  ts.setRotation(0);
+  // Initialize XPT2046_Bitbang to be used by LVGL
+  ts.begin();
 
   // Initialize LVGL and set a logging callback funtion for debugging
   lv_init();
@@ -31,7 +27,20 @@ void setup()
 
   lv_display_t* disp;
   disp = lv_tft_espi_create(SCREEN_WIDTH, SCREEN_HEIGHT, draw_buf, sizeof(draw_buf));
-  tft.setRotation(0);
+
+  tft.setRotation(0); // Rotate screen so it will be vertical
+  tft.fillScreen(TFT_BLACK); // Nicer to look at if nothing gets drawn to the screen
+
+  if(!MicroSDCardReader::initializeMicroSDReader())
+  {
+    // Print error and return if the MicroSD Card Reader doesn't initalize correctly, so there wont by any further errors
+    Serial.println( MicroSDCardReader::getLastError() ); // Debug
+    tft.println( MicroSDCardReader::getLastError() ); // Let the user know the error without making them connect to serial monitor
+    while (true); // Wait forever
+  }
+
+  sqlite3_initialize(); // Initialize SQLite3 so it can be used later
+  sqlite3_soft_heap_limit(164000); // Make sure SQLite3 doesn't try to use more RAM that available 
 
   // Make device driver for touch
   lv_indev_t* indev = lv_indev_create();

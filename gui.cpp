@@ -1,9 +1,10 @@
+#include <algorithm>
+#include "HardwareSerial.h"
 #include "gui.h"
 
-SPIClass tsSPIClass(VSPI);
-XPT2046_Touchscreen ts(XPT2046_CS, XPT2046_IRQ);
+XPT2046_Bitbang ts(XPT2046_MOSI, XPT2046_MISO, XPT2046_CLK, XPT2046_CS);
 
-TFT_eSPI tft = TFT_eSPI();
+TFT_eSPI tft = TFT_eSPI(SCREEN_WIDTH, SCREEN_HEIGHT);
 
 uint32_t draw_buf[DRAW_BUF_SIZE / 4];
 
@@ -14,14 +15,17 @@ lv_obj_t *keyboard, *searchBox;
 
 struct CallbackData
 {
-  char* title;
+  std::string title;
   lv_obj_t* page;
 };
+
+std::vector<std::string> titles = {};
+std::vector<std::string> content = {};
 
 void text_dontpanic_background()
 {
   static lv_style_t backgroundText;
-  lv_style_init(&backgroundText);
+  lv_style_init(&backgroundText); // Small memory leak 
   lv_style_set_text_color(&backgroundText, lv_color_make(85, 85, 85));
   lv_style_set_text_font(&backgroundText, &DontPanicFont);
 
@@ -61,7 +65,7 @@ void menu_create_button(char* title, lv_obj_t*& menu, lv_obj_t*& mainPage, lv_ob
   lv_menu_set_load_page_event(menu, content, page);
 
   CallbackData* data = new CallbackData;
-  data->title = title;
+  data->title = std::string(title);
   data->page = page;
 
   lv_obj_add_event_cb(content, menu_callback, LV_EVENT_CLICKED, data);
@@ -73,26 +77,34 @@ void menu_callback(lv_event_t* event)
   CallbackData* data = static_cast<CallbackData*>( lv_event_get_user_data(event) );
 
   // Get content object as it is the parent of the label object
-  lv_obj_t* content = lv_obj_get_child(data->page, 0);
-  if (!content)
+  lv_obj_t* contentObj = lv_obj_get_child(data->page, 0);
+  if (!contentObj)
   {
     Serial.println("Could not find content");
     return;
   }
 
   // Get label object so we can chnage it's text
-  lv_obj_t* label = lv_obj_get_child_by_type(content, 0, &lv_label_class);
+  lv_obj_t* label = lv_obj_get_child_by_type(contentObj, 0, &lv_label_class);
   if (!label)
   {
     Serial.println("Could not find label");
     return;
   }
 
-  std::stringstream ss;
-  ss << "Actual Content for ";
-  ss << (char*)data->title;
+  int index = 0;
+  for (std::string i : titles)
+  {
+    if (i == data->title || i.c_str() == data->title.c_str())
+    {
+      Serial.println(index);
+      break;
+    }
+    ++index;
+  }
 
-  lv_label_set_text(label, ss.str().c_str());
+  std::string currentContent = content.at(index);
+  lv_label_set_text(label, currentContent.c_str());
 }
 
 void gui_startupscreen()
@@ -152,8 +164,30 @@ void gui_search_results(const char* query)
   lv_obj_t* content;
   lv_obj_t* label;
 
+  lv_obj_t* mainPage = lv_menu_page_create(results, nullptr);
+
+  std::stringstream path;
+  path << /*SD.mountpoint() <<*/ "/sd/data.db";
+  DatabaseReader dbReader = DatabaseReader( (char*)path.str().c_str() );
+
+  std::stringstream ss;
+  ss << "SELECT * FROM pages_fts WHERE title MATCH \'" << query << "\' LIMIT 5;";
+  if ( !dbReader.queryDatabase((char*)ss.str().c_str(), sqliteCallback) )
+  {
+    Serial.println( dbReader.getLastError() );
+    while (true); // Wait forever in case of an error
+  }
+
+  for (int index = 0; index < titles.size(); index++)
+  {
+    std::string title = titles[index];
+
+    lv_obj_t* searchPage = menu_create_page((char*)title.c_str(), results, content, label);
+    menu_create_button((char*)title.c_str(), results, mainPage, searchPage);
+  }
+
   // Create test pages
-  lv_obj_t* clickmePage = menu_create_page("Click me!", results, content, label);
+  /*lv_obj_t* clickmePage = menu_create_page("Click me!", results, content, label);
   lv_obj_t* clickmePage2 = menu_create_page("Click me!", results, content, label);
   lv_obj_t* clickmePage3 = menu_create_page("Click me!", results, content, label);
 
@@ -162,10 +196,33 @@ void gui_search_results(const char* query)
   // Add buttons to go to the clickme pages
   menu_create_button("Click me!", results, mainPage, clickmePage);
   menu_create_button("Click me 2!", results, mainPage, clickmePage2);
-  menu_create_button("Click me 3!", results, mainPage, clickmePage3);
+  menu_create_button("Click me 3!", results, mainPage, clickmePage3);*/
 
   // Set the starting page to mainPage
   lv_menu_set_page(results, mainPage);
+}
+
+static int sqliteCallback(void* unused, int count, char** data, char** columns)
+{
+  for (int index = 0; index < count; index++) {
+    if ( strcmp(columns[index], "title") == 0 )
+    {
+      std::string titleData = std::string(data[index]);
+      titles.push_back(titleData);
+    }
+    else if ( strcmp(columns[index], "content") == 0 )
+    {
+      std::string contentData = std::string(data[index]);
+      content.push_back(contentData);
+    }
+    else
+    {
+      // Ignored
+      Serial.println(columns[index]);
+    }
+  }
+
+  return 0;
 }
 
 void backButtonCallback(lv_event_t* event)
@@ -203,29 +260,31 @@ void searchBoxCallback(lv_event_t* event)
   }
 }
 
+// https://github.com/orlandobianco/cydOS/blob/e2232fbe520765e9bfa1e249d090815014caf3fb/src/main.cpp#L32
 void touchscreen_read(lv_indev_t* indev, lv_indev_data_t* data)
 {
-  if(ts.touched() && ts.tirqTouched())
-  {
+  TouchPoint p = ts.getTouch();
+
+  // Hours wasted on mapping: many
+  x = map(p.xRaw, 200, 3700, 1, SCREEN_HEIGHT);
+  y = map(p.yRaw, 240, 3800, 1, SCREEN_WIDTH);
+
+  if (p.x != 0 && p.y != 0) 
+  { 
+    data->point.x = 240 - y;  // Invert X coordinate
+    data->point.y = x;
+    data->state = LV_INDEV_STATE_PR;
+
+    // Check for first click so we can load main menu
     if(!startMenuClicked)
     {
       startMenuClicked = 1;
       lv_obj_clean( lv_screen_active() );
       gui_main_menu();
     }
-
-    TS_Point point = ts.getPoint();
-    x = map(point.x, 200, 3700, 1, SCREEN_WIDTH);
-    y = map(point.y, 240, 3800, 1, SCREEN_HEIGHT);
-    z = point.z;
-
-    data->point.x = x;
-    data->point.y = y;
-
-    data->state = LV_INDEV_STATE_PRESSED;
-  }
-  else
+  } 
+  else 
   {
-    data->state = LV_INDEV_STATE_RELEASED;
+    data->state = LV_INDEV_STATE_REL;
   }
 }
