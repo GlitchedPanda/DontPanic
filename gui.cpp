@@ -1,5 +1,3 @@
-#include <algorithm>
-#include "HardwareSerial.h"
 #include "gui.h"
 
 XPT2046_Bitbang ts(XPT2046_MOSI, XPT2046_MISO, XPT2046_CLK, XPT2046_CS);

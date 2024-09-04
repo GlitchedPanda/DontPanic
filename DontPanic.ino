@@ -1,4 +1,4 @@
-#include "gui.h"
+#include "gui.hpp"
 
 void lvglDebug(lv_log_level_t level, const char* buffer)
 {

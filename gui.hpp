@@ -7,9 +7,9 @@
 #include <vector>
 #include <string.h>
 
-#include "sdcard.h"
+#include "sdcard.hpp"
 
-#include "fonts/DontPanicFont.h"
+#include "fonts/DontPanicFont.hpp"
 
 // ----------------------------
 // Touch Screen pins
