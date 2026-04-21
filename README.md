@@ -15,7 +15,7 @@ Offline wikipedia reader for the CYD inspired by [The Hitchhiker's Guide to The 
 - After you have started it, click anywhere on the screen and you will be able to search.
 
 ## Limitations
-The CYD does not have a lot of memory. It only has 256MB of it. This means that with large databaes (Like a wikipedia dump), it will often run out of memory. Therefore you should try to search in a way that doesn't make the CYD search too much. Any help to solve this issue would be greatly appreciated :).
+The CYD does not have a lot of memory. It only has 520KB of it. This means that with large databaes (Like a wikipedia dump), it will often run out of memory. Therefore you should try to search in a way that doesn't make the CYD search too much. Any help to solve this issue would be greatly appreciated :).
 
 ## Resources
 https://github.com/TheNitek/XPT2046_Bitbang_Arduino_Library
